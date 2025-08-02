@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:frontend": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -15,7 +16,8 @@
     "@tauri-apps/plugin-opener": "^2",
     "lucide-react": "^0.534.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "vite-plugin-tauri": "^4.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

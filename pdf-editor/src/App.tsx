@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, RotateCw, Trash2, Download, Upload } from 'lucide-react';
 import { open, save } from '@tauri-apps/plugin-dialog';
+import { isTauri, invoke } from '@tauri-apps/api/core';
 
 // Tauri v2公式の環境判定
-function isTauri() {
-  return Boolean(import.meta.env.TAURI_PLATFORM);
+function isTauriAvailable() {
+  return isTauri();
 }
 
 interface PdfPage {
@@ -32,15 +33,15 @@ export default function PdfEditor() {
   const [tauriAvailable, setTauriAvailable] = useState(false);
 
   useEffect(() => {
-    setTauriAvailable(isTauri());
-    console.log('Tauri available:', isTauri());
+    setTauriAvailable(isTauriAvailable());
+    console.log('Tauri available:', isTauriAvailable());
   }, []);
 
   const handleOpenPdf = async () => {
     try {
       setLoading(true);
       setError(null);
-      if (!isTauri()) {
+      if (!isTauriAvailable()) {
         setError('Tauri API is not available. Please run this in a Tauri application.');
         return;
       }
@@ -119,7 +120,7 @@ export default function PdfEditor() {
     try {
       setLoading(true);
       setError(null);
-      if (!isTauri()) {
+      if (!isTauriAvailable()) {
         setError('Tauri API is not available. Please run this in a Tauri application.');
         return;
       }
