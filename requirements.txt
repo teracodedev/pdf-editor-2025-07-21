@@ -1,0 +1,11 @@
+# PDF Editor - 必要なライブラリ
+PyPDF2>=3.0.0
+
+# 代替（どちらか一方で可）:
+# pypdf>=4.0.0
+
+# 標準ライブラリ（インストール不要）:
+# - tkinter (GUI)
+# - threading
+# - pathlib
+# - logging
