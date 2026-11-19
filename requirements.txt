@@ -4,6 +4,17 @@ PyPDF2>=3.0.0
 # 代替（どちらか一方で可）:
 # pypdf>=4.0.0
 
+# JPEG変換用
+pdf2image>=1.17.0
+Pillow>=10.0.0
+
+# 注意: JPEG変換には Poppler も必要です
+# Windows: https://github.com/oschwartz10612/poppler-windows/releases
+#   解凍後、環境変数 POPPLER_PATH に bin フォルダを設定
+#   例: C:\Program Files\poppler\Library\bin
+# macOS: brew install poppler
+# Linux: sudo apt-get install poppler-utils
+
 # 標準ライブラリ（インストール不要）:
 # - tkinter (GUI)
 # - threading
