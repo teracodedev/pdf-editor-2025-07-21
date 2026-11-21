@@ -1,5 +1,5 @@
 """
-PDF Editor - PDFファイルの分割・回転・JPEG変換を行うGUIツール
+PDF Editor - PDFファイルの分割・削除・回転・JPEG変換を行うGUIツール
 
 作者: Claude
 日付: 2025年7月21日
@@ -36,7 +36,7 @@ except ImportError:
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 APP_VERSION = "2025年7月21日バージョン"
-APP_TITLE = "PDF Editor - 分割・回転・JPEG変換"
+APP_TITLE = "PDF Editor - 分割・削除・回転・JPEG変換"
 
 # ============================================================================
 # ログ設定
@@ -180,7 +180,7 @@ def unique_output_path(directory, filename):
 # ============================================================================
 
 class PDFOperations:
-    """PDFの分割・回転・JPEG変換処理をまとめたクラス。"""
+    """PDFの分割・削除・回転・JPEG変換処理をまとめたクラス。"""
 
     @staticmethod
     def get_page_count(pdf_path):
@@ -281,6 +281,47 @@ class PDFOperations:
             with open(output_path, "wb") as out_f:
                 writer.write(out_f)
         return output_path
+
+    @staticmethod
+    def delete_pages(pdf_path, output_path, page_numbers):
+        """
+        指定ページを削除し、残りのページで新しいPDFを保存する。
+        page_numbers: 削除するページ番号のリスト（1始まり）。
+        戻り値: (出力パス, 削除したページ数, 残ったページ数)
+        """
+        if not page_numbers:
+            raise ValueError("削除するページが指定されていません")
+
+        pdf_path = Path(pdf_path)
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(pdf_path, "rb") as f:
+            reader = PdfReader(f)
+            total = len(reader.pages)
+            if total == 0:
+                raise ValueError("PDFにページがありません")
+
+            to_delete = set(page_numbers)
+            for p in to_delete:
+                if p < 1 or p > total:
+                    raise ValueError(f"ページ番号 {p} が無効です（総ページ数: {total}）")
+
+            if len(to_delete) >= total:
+                raise ValueError(
+                    "すべてのページを削除することはできません（少なくとも1ページ残してください）"
+                )
+
+            writer = PdfWriter()
+            for i in range(total):
+                if (i + 1) not in to_delete:
+                    writer.add_page(reader.pages[i])
+
+            remaining = len(writer.pages)
+            with open(output_path, "wb") as out_f:
+                writer.write(out_f)
+
+        return output_path, len(to_delete), remaining
 
     @staticmethod
     def rotate_pages(pdf_path, output_path, angle, page_numbers=None):
@@ -428,6 +469,7 @@ class PDFEditorApp:
         self.split_mode = tk.StringVar(value="every")  # every / ranges / extract
         self.pages_per_file = tk.StringVar(value="1")
         self.range_text = tk.StringVar(value="")
+        self.delete_pages_text = tk.StringVar(value="")
         self.rotate_target = tk.StringVar(value="all")  # all / selected
         self.rotate_pages_text = tk.StringVar(value="")
         self.rotate_angle = tk.IntVar(value=90)
@@ -497,18 +539,21 @@ class PDFEditorApp:
             side=tk.LEFT, padx=(12, 0)
         )
 
-        # --- ノートブック（分割 / 回転 / JPEG変換） ---
+        # --- ノートブック（分割 / 削除 / 回転 / JPEG変換） ---
         notebook = ttk.Notebook(main)
         notebook.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
         split_tab = ttk.Frame(notebook, padding=10)
+        delete_tab = ttk.Frame(notebook, padding=10)
         rotate_tab = ttk.Frame(notebook, padding=10)
         jpeg_tab = ttk.Frame(notebook, padding=10)
         notebook.add(split_tab, text="分割")
+        notebook.add(delete_tab, text="削除")
         notebook.add(rotate_tab, text="回転")
         notebook.add(jpeg_tab, text="JPEG変換")
 
         self._build_split_tab(split_tab)
+        self._build_delete_tab(delete_tab)
         self._build_rotate_tab(rotate_tab)
         self._build_jpeg_tab(jpeg_tab)
 
@@ -520,6 +565,11 @@ class PDFEditorApp:
             btn_frame, text="分割を実行", command=self._run_split, width=14
         )
         self.split_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.delete_btn = ttk.Button(
+            btn_frame, text="削除を実行", command=self._run_delete, width=14
+        )
+        self.delete_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         self.rotate_btn = ttk.Button(
             btn_frame, text="回転を実行", command=self._run_rotate, width=14
@@ -556,6 +606,7 @@ class PDFEditorApp:
         if not PDF_AVAILABLE:
             self._log("警告: PyPDF2 / pypdf が見つかりません。pip install PyPDF2 を実行してください。")
             self.split_btn.config(state="disabled")
+            self.delete_btn.config(state="disabled")
             self.rotate_btn.config(state="disabled")
         else:
             self._log("PDFファイルを選択してください。")
@@ -622,6 +673,32 @@ class PDFEditorApp:
         extract_hint.grid(row=5, column=0, sticky="w", padx=(24, 0), pady=(2, 0))
 
         self._update_split_ui()
+
+    def _build_delete_tab(self, parent):
+        parent.columnconfigure(1, weight=1)
+
+        ttk.Label(parent, text="削除するページ:").grid(row=0, column=0, sticky="w")
+        self.delete_pages_entry = ttk.Entry(parent, textvariable=self.delete_pages_text)
+        self.delete_pages_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        ttk.Label(parent, text="例: 2,5-7（指定したページを削除）", foreground="gray").grid(
+            row=1, column=1, sticky="w", padx=(6, 0), pady=(2, 0)
+        )
+
+        ttk.Label(
+            parent,
+            text="※ 元ファイルは変更せず、削除後のPDFを出力先に保存します",
+            foreground="gray",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        ttk.Label(
+            parent,
+            text="※ すべてのページは削除できません（少なくとも1ページ残す必要があります）",
+            foreground="gray",
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Label(
+            parent,
+            text="※ 出力ファイル名: 元ファイル名_deleted.pdf",
+            foreground="gray",
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
     def _build_rotate_tab(self, parent):
         parent.columnconfigure(1, weight=1)
@@ -759,6 +836,7 @@ class PDFEditorApp:
             state = "disabled" if busy else "normal"
             if PDF_AVAILABLE:
                 self.split_btn.config(state=state)
+                self.delete_btn.config(state=state)
                 self.rotate_btn.config(state=state)
             if PDF2IMAGE_AVAILABLE and self.poppler_path is not None:
                 self.jpeg_btn.config(state=state)
@@ -926,6 +1004,75 @@ class PDFEditorApp:
                 self._log(f"分割エラー: {e}")
                 self.root.after(
                     0, lambda: messagebox.showerror("エラー", f"分割に失敗しました:\n{e}")
+                )
+            finally:
+                self._set_busy(False)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # 削除
+    # ------------------------------------------------------------------
+
+    def _run_delete(self):
+        if self.is_processing:
+            return
+        pdf, out = self._validate_common()
+        if not pdf:
+            return
+
+        try:
+            text = self.delete_pages_text.get().strip()
+            if not text:
+                raise ValueError("削除するページを入力してください")
+            total = self.page_count.get() or PDFOperations.get_page_count(pdf)
+            pages = parse_page_ranges(text, total)
+            if len(pages) >= total:
+                raise ValueError(
+                    "すべてのページを削除することはできません（少なくとも1ページ残してください）"
+                )
+        except Exception as e:
+            messagebox.showerror("入力エラー", str(e))
+            return
+
+        if not messagebox.askyesno(
+            "確認",
+            f"次の {len(pages)} ページを削除しますか？\n"
+            f"{text}\n\n"
+            f"（元ファイルは変更されません）",
+        ):
+            return
+
+        self._set_busy(True)
+        self._log(f"ページ削除を開始します（{len(pages)}ページ削除）…")
+
+        def worker():
+            try:
+                stem = Path(pdf).stem
+                name = f"{stem}_deleted.pdf"
+                out_path = unique_output_path(out, name)
+                result_path, deleted_count, remaining = PDFOperations.delete_pages(
+                    pdf, out_path, pages
+                )
+                self._log(
+                    f"削除完了: {result_path.name}"
+                    f"（{deleted_count}ページ削除 / 残り{remaining}ページ）"
+                )
+                self.root.after(
+                    0,
+                    lambda: messagebox.showinfo(
+                        "完了",
+                        f"ページ削除が完了しました。\n"
+                        f"削除: {deleted_count}ページ\n"
+                        f"残り: {remaining}ページ\n"
+                        f"出力: {result_path}",
+                    ),
+                )
+            except Exception as e:
+                logger.exception("削除エラー")
+                self._log(f"削除エラー: {e}")
+                self.root.after(
+                    0, lambda: messagebox.showerror("エラー", f"削除に失敗しました:\n{e}")
                 )
             finally:
                 self._set_busy(False)
